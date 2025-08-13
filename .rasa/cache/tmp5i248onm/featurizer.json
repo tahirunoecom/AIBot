@@ -1,0 +1,72 @@
+{
+  "type": "MaxHistoryTrackerFeaturizer",
+  "state_featurizer": {
+    "action_texts": [],
+    "entity_tag_specs": [],
+    "feature_states": {
+      "intent": {
+        "add_to_cart": 0,
+        "back": 1,
+        "bot_challenge": 2,
+        "check_payment_status": 3,
+        "checkout": 4,
+        "faq": 5,
+        "get_address": 6,
+        "goodbye": 7,
+        "greet": 8,
+        "nlu_fallback": 9,
+        "out_of_scope": 10,
+        "pay_now": 11,
+        "restart": 12,
+        "search_products": 13,
+        "select_product": 14,
+        "session_start": 15,
+        "show_categories": 16,
+        "track_order": 17,
+        "view_cart": 18
+      },
+      "action_name": {
+        "action_listen": 0,
+        "action_restart": 1,
+        "action_session_start": 2,
+        "action_default_fallback": 3,
+        "action_deactivate_loop": 4,
+        "action_revert_fallback_events": 5,
+        "action_default_ask_affirmation": 6,
+        "action_default_ask_rephrase": 7,
+        "action_two_stage_fallback": 8,
+        "action_unlikely_intent": 9,
+        "action_back": 10,
+        "...": 11,
+        "action_extract_slots": 12,
+        "action_show_categories_with_products": 13,
+        "action_select_product": 14,
+        "action_add_to_cart": 15,
+        "action_view_cart": 16,
+        "action_checkout": 17,
+        "action_track_order": 18,
+        "action_get_address": 19,
+        "action_create_stripe_checkout": 20,
+        "action_check_payment_status": 21,
+        "action_product_llm_search": 22,
+        "action_next_product_page": 23,
+        "action_reset_search_page": 24,
+        "utter_default": 25,
+        "utter_faq": 26,
+        "utter_goodbye": 27,
+        "utter_greet": 28,
+        "utter_iamabot": 29
+      },
+      "entities": {
+        "order_id": 0,
+        "product_category": 1,
+        "product_name": 2,
+        "product_title": 3
+      },
+      "slots": {},
+      "active_loop": {}
+    }
+  },
+  "remove_duplicates": true,
+  "max_history": 5
+}

@@ -1,0 +1,171 @@
+---
+version: "3.1"
+
+intents:
+  - greet
+  - show_categories
+  - search_products
+  - search_products_next
+  - select_product
+  - add_to_cart
+  - view_cart
+  - get_address
+  - checkout
+  - pay_now
+  - check_payment_status
+  - track_order
+  - faq
+  - goodbye
+  - bot_challenge
+  - provide_zipcode
+  - search_store
+  - select_store
+  - change_zipcode
+  - change_store
+
+entities:
+  - product_category
+  - product_name
+  - order_id
+  - product_title
+  - zipcode
+  - store_name
+
+slots:
+  user_id:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  recent_products:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  selected_product:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  order_id:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  search_page:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  last_search_string:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  zipcode:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  last_zipcode:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  selected_store:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  store_context:
+    type: bool
+    influence_conversation: false
+    mappings:
+      - type: custom
+
+responses:
+  utter_greet:
+    - text: "Welcome to AnythingInstantly! How can I help you today?"
+
+  utter_faq:
+    - text: |
+        You can return a product within 7 days by visiting your orders page.
+    - text: |
+        Delivery is free for orders above ₹1,000.
+        For others, a small fee applies.
+    - text: |
+        Please contact customer support for any help.
+
+  utter_goodbye:
+    - text: "Goodbye! If you need anything else, just ask."
+
+  utter_iamabot:
+    - text: |
+        I am a virtual assistant bot built to help you with AnythingInstantly!
+
+  utter_default:
+    - text: |
+        Sorry, I didn't understand that. Could you rephrase?
+
+  utter_ask_zipcode:
+    - text: |
+        Please provide your 5-digit ZIP code.
+
+  utter_invalid_zipcode:
+    - text: |
+        That ZIP code doesn't seem valid.
+        Please enter a proper 5-digit US ZIP code.
+
+  utter_ask_store_search:
+    - text: |
+        Please tell me the store or restaurant name you want to search.
+
+  utter_show_store_options:
+    - text: |
+        Found these stores in your area:
+
+  utter_ask_store_selection:
+    - text: |
+        Please select a store by typing its option number or name.
+
+  utter_no_stores_found:
+    - text: |
+        Sorry, no stores found near this ZIP code.
+        Would you like to try a different ZIP code?
+
+  utter_welcome_back:
+    - text: |
+        Welcome back!
+        Would you like to continue with your last ZIP code
+        {last_zipcode} and store {selected_store}?
+
+  utter_zipcode_changed:
+    - text: |
+        ZIP code updated to {zipcode}.
+
+  utter_store_changed:
+    - text: |
+        Store changed to {selected_store}.
+
+  utter_fallback_store_search:
+    - text: |
+        Sorry, I couldn't find a matching store.
+        Please try again or enter a different name.
+
+actions:
+  - action_show_categories_with_products
+  - action_select_product
+  - action_add_to_cart
+  - action_view_cart
+  - action_get_address
+  - action_checkout
+  - action_track_order
+  - action_create_stripe_checkout
+  - action_check_payment_status
+  - action_product_llm_search
+  - action_next_product_page
+  - action_reset_search_page
+  - validate_zipcode_form
+  - action_get_nearest_store
+  - action_set_selected_store
+  - action_recall_previous_location

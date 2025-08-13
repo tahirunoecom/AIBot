@@ -1,0 +1,106 @@
+version: "3.1"
+
+rules:
+
+- rule: Say goodbye anytime the user says goodbye
+  steps:
+  - intent: goodbye
+  - action: utter_goodbye
+
+- rule: Say 'I am a bot' anytime the user challenges
+  steps:
+  - intent: bot_challenge
+  - action: utter_iamabot
+
+- rule: Handle fallback
+  steps:
+  - intent: nlu_fallback
+  - action: utter_default
+
+- rule: Show categories on user request
+  steps:
+  - intent: show_categories
+  - action: action_show_categories_with_products
+
+- rule: select product by number
+  steps:
+  - intent: select_product
+  - action: action_select_product
+
+- rule: Add to cart
+  steps:
+  - intent: add_to_cart
+  - action: action_add_to_cart
+
+- rule: Show cart
+  steps:
+  - intent: view_cart
+  - action: action_view_cart
+
+- rule: Show user address before checkout
+  steps:
+  - intent: get_address
+  - action: action_get_address
+
+- rule: Initiate Stripe payment
+  steps:
+  - intent: pay_now
+  - action: action_create_stripe_checkout
+
+- rule: Check payment status
+  steps:
+  - intent: check_payment_status
+  - action: action_check_payment_status
+
+- rule: Respond to FAQ intent
+  steps:
+    - intent: faq
+    - action: utter_faq
+
+- rule: Show next page of product search
+  steps:
+    - intent: search_products_next
+    - action: action_next_product_page  # increments slot
+    - action: action_product_llm_search # reruns the search
+
+- rule: Reset page on new product search
+  steps:
+    - intent: search_products
+    - action: action_reset_search_page
+    - action: action_product_llm_search
+
+- rule: Ask for ZIP code if missing when store context needed
+  condition:
+  - slot_was_set:
+    - store_context: false
+  steps:
+  - intent: search_store
+  - action: zipcode_form
+  - active_loop: zipcode_form
+
+- rule: Submit ZIP code form and proceed to get stores
+  condition:
+  - active_loop: zipcode_form
+  steps:
+  - action: zipcode_form
+  - active_loop: null
+  - action: action_get_nearest_store
+
+- rule: Ask for store selection if multiple stores found
+  steps:
+  - action: action_show_store_options 
+
+- rule: Set selected store and update context
+  steps:
+  - intent: select_store
+  - action: action_set_selected_store
+
+- rule: Handle user wanting to change ZIP code mid-conversation
+  steps:
+  - intent: change_zipcode
+  - action: zipcode_form
+
+- rule: Handle user wanting to change store mid-conversation
+  steps:
+  - intent: change_store
+  - action: action_get_nearest_store

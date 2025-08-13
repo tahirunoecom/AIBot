@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rasa Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f7f7f7;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #chat-container {
+            width: 400px;
+            max-width: 95vw;
+            height: 600px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        #chat-header {
+            background-color: #4a90e2;
+            padding: 12px 16px;
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+        #chat-box {
+            flex: 1;
+            padding: 12px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+        }
+        .message {
+            margin-bottom: 12px;
+            max-width: 75%;
+            padding: 8px 14px;
+            border-radius: 18px;
+            line-height: 1.4;
+            clear: both;
+        }
+        .user-message {
+            background-color: #6cb4ee;
+            color: white;
+            float: right;
+            border-bottom-right-radius: 0;
+        }
+        .bot-message {
+            background-color: #eee;
+            color: #333;
+            float: left;
+            border-bottom-left-radius: 0;
+        }
+        #input-container {
+            display: flex;
+            padding: 8px 12px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        #send-btn {
+            background-color: #4a90e2;
+            border: none;
+            color: white;
+            padding: 10px 18px;
+            margin-left: 8px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+        #send-btn:hover {
+            background-color: #3a78c2;
+        }
+        .button-group {
+            margin-top: 6px;
+            clear: both;
+        }
+        .rasa-btn {
+            background-color: #4a90e2;
+            border: none;
+            color: white;
+            padding: 6px 14px;
+            margin-right: 6px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background-color 0.3s ease;
+        }
+        .rasa-btn:hover {
+            background-color: #3a78c2;
+        }
+        /* Scrollbar Styling */
+        #chat-box::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-box::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+		.bot-message p {
+		  margin: 0 0 16px 0 !important;  /* makes every <p> (Markdown paragraphs) have a visible gap */
+		  line-height: 1.6;
+		}
+		
+		.message p {
+		  margin: 0 0 16px 0 !important;
+		}
+
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-header">AnythingInstantly Bot</div>
+        <div id="chat-box"></div>
+        <div id="input-container">
+            <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off" />
+            <button id="send-btn" title="Send">▶</button>
+        </div>
+    </div>
+
+    <!-- Load jQuery from CDN -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+      $(function () {
+		  const rasaEndpoint = "http://localhost:5005/webhooks/rest/webhook";
+
+		  function appendMessage(text, isUser) {
+			const msgClass = isUser ? "user-message" : "bot-message";
+			let html = text;
+			if (!isUser && window.marked) {
+			  html = marked.parse(text);
+			}
+			const $msg = $("<div>").addClass("message").addClass(msgClass).html(html);
+			$("#chat-box").append($msg);
+			$("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
+		  }
+
+		  function appendButtons(buttons) {
+			const $group = $("<div>").addClass("button-group");
+			buttons.forEach(btn => {
+			  const $btn = $("<button>").addClass("rasa-btn").text(btn.title);
+			  $btn.on("click", function () {
+				sendMessage(btn.payload);
+				$group.remove();
+			  });
+			  $group.append($btn);
+			});
+			$("#chat-box").append($group);
+			$("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
+		  }
+
+		  function sendMessage(messageText) {
+			if (!messageText.trim()) return;
+
+			appendMessage(messageText, true);
+			$("#user-input").val("").focus();
+
+			$.ajax({
+			  url: rasaEndpoint,
+			  type: "POST",
+			  contentType: "application/json",
+			  data: JSON.stringify({
+				sender: "user",
+				message: messageText
+			  }),
+			  success: function (data) {
+				if (data && data.length) {
+				  data.forEach(resp => {
+					if (resp.text) {
+					  appendMessage(resp.text, false);
+					}
+					if (resp.buttons) {
+					  appendButtons(resp.buttons);
+					}
+					// you can extend here for images or custom attachments
+				  });
+				} else {
+				  appendMessage("🤖 [No response from bot]", false);
+				}
+			  },
+			  error: function (err) {
+				appendMessage("⚠️ Server Error or Connection Problem", false);
+				console.error("Rasa request failed", err);
+			  }
+			});
+		  }
+
+		  $("#send-btn").on("click", function () {
+			const msg = $("#user-input").val();
+			sendMessage(msg);
+		  });
+
+		  $("#user-input").on("keypress", function (e) {
+			if (e.which === 13) {
+			  e.preventDefault();
+			  $("#send-btn").click();
+			}
+		  });
+
+		  // Optionally greet user on page load
+		  appendMessage("👋 Hi! I'm your Shop Bot. How can I assist you today?", false);
+		});
+
+    </script>
+	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</body>
+</html>

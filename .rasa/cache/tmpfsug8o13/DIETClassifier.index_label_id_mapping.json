@@ -1,0 +1,17 @@
+{
+  "0": "add_to_cart",
+  "1": "bot_challenge",
+  "2": "check_payment_status",
+  "3": "checkout",
+  "4": "faq",
+  "5": "get_address",
+  "6": "goodbye",
+  "7": "greet",
+  "8": "pay_now",
+  "9": "search_products",
+  "10": "search_products_next",
+  "11": "select_product",
+  "12": "show_categories",
+  "13": "track_order",
+  "14": "view_cart"
+}

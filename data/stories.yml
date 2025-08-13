@@ -1,0 +1,37 @@
+version: "3.1"
+
+stories:
+
+- story: greet and show categories
+  steps:
+  - intent: greet
+  - action: utter_greet
+  - intent: show_categories
+  - action: action_show_categories_with_products
+
+- story: view cart and checkout
+  steps:
+  - intent: view_cart
+  - action: action_view_cart
+  - intent: checkout
+  - action: action_checkout
+
+- story: track order
+  steps:
+  - intent: track_order
+  - action: action_track_order
+
+- story: select product by number
+  steps:
+  - intent: select_product
+  - action: action_select_product
+
+- story: Initiate Stripe payment
+  steps:
+  - intent: pay_now
+  - action: action_create_stripe_checkout
+
+- story: Check payment status
+  steps:
+  - intent: check_payment_status
+  - action: action_check_payment_status

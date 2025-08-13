@@ -1,0 +1,11 @@
+{
+  "0": "add_to_cart",
+  "1": "checkout",
+  "2": "faq",
+  "3": "greet",
+  "4": "login",
+  "5": "register",
+  "6": "search_products",
+  "7": "track_order",
+  "8": "view_cart"
+}

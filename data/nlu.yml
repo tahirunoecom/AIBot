@@ -1,0 +1,202 @@
+version: "3.1"
+
+nlu:
+- intent: greet
+  examples: |
+    - hello
+    - hi
+    - hey
+    - good morning
+    - good evening
+
+- intent: show_categories
+  examples: |
+    - what categories do you have?
+    - show me all categories
+    - list all categories with products
+    - categories please
+    - what kind of categories are there?
+    - can you show categories?
+    - categories
+    - show categories
+    - category
+    - categories list
+
+- intent: search_products
+  examples: |
+    - show me [snacks](product_category)
+    - what products do you have?
+    - show me [drinks](product_category)
+    - do you have [chips](product_category)?
+    - I want to buy [Pepsi](product_name)
+    - search for [chocolates](product_category)
+    - show me [Pepsi](product_name)
+    - I want to buy [lays](product_name)
+    - search for [chips](product_category)
+    - do you have [cookies](product_name)?
+
+- intent: select_product
+  examples: |
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 20
+    - 50
+    - 100
+    - select 1
+    - select 5
+    - choose 3
+    - I want product 2
+    - pick 50
+    - show me 7
+
+- intent: add_to_cart
+  examples: |
+    - add [Pepsi](product_title) to my cart
+    - put [Lays](product_title) in my cart
+    - buy this product
+    - add to cart
+    - add this to my cart
+    - put this in the cart
+    - add it to my cart
+    - yes, add to cart
+    - buy this
+    - I want to buy this
+    - yes, add
+    - add
+    - add product to cart
+    - please add to cart
+
+- intent: view_cart
+  examples: |
+    - view cart
+    - show my cart
+    - display cart
+    - open my cart
+    - cart
+    - what's in my cart?
+    - show cart
+    - see my cart
+    - I want to view my cart
+    - check cart
+    - cart contents
+    - cart please
+
+- intent: get_address
+  examples: |
+    - show my address
+    - get my delivery address
+    - what's my saved address
+    - fetch address info
+    - view addresses
+    - show my addresses
+    - show addresses
+    - show delivery addresses
+    - see saved addresses
+    - display my addresses
+    - what addresses are on my profile
+    - my delivery addresses
+    - saved addresses
+    - check my addresses
+
+
+- intent: checkout
+  examples: |
+    - checkout
+    - I want to pay
+    - place my order
+
+- intent: track_order
+  examples: |
+    - track my order [12345](order_id)
+    - what is the status of my order [23456](order_id)?
+
+- intent: faq
+  examples: |
+    - how do I return a product?
+    - what are your delivery charges?
+    - how do I cancel my order?
+    - help me
+
+- intent: goodbye
+  examples: |
+    - bye
+    - goodbye
+    - see you later
+
+- intent: bot_challenge
+  examples: |
+    - are you a bot?
+    - who am I talking to?
+
+- intent: pay_now
+  examples: |
+    - I want to pay now
+    - pay now
+    - make payment
+    - purchase now
+    - checkout and pay
+    - proceed to payment
+    - pay my bill
+
+- intent: check_payment_status
+  examples: |
+    - Did my payment go through?
+    - What is the status of my order?
+    - Has my payment succeeded?
+    - Is my payment successful?
+    - Was my order paid?
+    - paid?
+    - Order payment?
+    - Did I pay?
+    - Check my payment status
+    - Is my order paid? 
+    - Was my order payment successful?
+    - What is the status of my payment?
+    - Has the payment gone through? 
+
+- intent: search_products_next
+  examples: |
+    - next
+    - next page
+    - show more
+    - more products
+    - next set
+    - show next
+
+- intent: provide_zipcode
+  examples: |
+    - 90210
+    - My ZIP code is 10001
+    - It's 30301
+    - 94105
+      
+- intent: change_zipcode
+  examples: |
+    - I want to change my ZIP code
+    - Update my ZIP to 60616
+    - New ZIP code is 77005
+      
+- intent: search_store
+  examples: |
+    - Show me Starbucks near me
+    - I want to buy from Walmart
+    - Find Taco Bell
+    - Check for Target store
+      
+- intent: select_store
+  examples: |
+    - 1
+    - Option 2
+    - Number three
+    - I'd like the first store
+    - Taco Bell Market St
+      
+- intent: change_store
+  examples: |
+    - I want to change the store
+    - Select a different store
+    - Change the restaurant
+    - Choose another store

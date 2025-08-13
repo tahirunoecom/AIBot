@@ -1,0 +1,14 @@
+{
+  "0": "add_to_cart",
+  "1": "bot_challenge",
+  "2": "checkout",
+  "3": "faq",
+  "4": "get_address",
+  "5": "goodbye",
+  "6": "greet",
+  "7": "search_products",
+  "8": "select_product",
+  "9": "show_categories",
+  "10": "track_order",
+  "11": "view_cart"
+}

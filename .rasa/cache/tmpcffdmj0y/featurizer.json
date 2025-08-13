@@ -1,0 +1,69 @@
+{
+  "type": "MaxHistoryTrackerFeaturizer",
+  "state_featurizer": {
+    "action_texts": [],
+    "entity_tag_specs": [],
+    "feature_states": {
+      "intent": {
+        "add_to_cart": 0,
+        "back": 1,
+        "bot_challenge": 2,
+        "checkout": 3,
+        "faq": 4,
+        "get_address": 5,
+        "goodbye": 6,
+        "greet": 7,
+        "nlu_fallback": 8,
+        "out_of_scope": 9,
+        "pay_now": 10,
+        "restart": 11,
+        "search_products": 12,
+        "select_product": 13,
+        "session_start": 14,
+        "show_categories": 15,
+        "track_order": 16,
+        "view_cart": 17
+      },
+      "action_name": {
+        "action_listen": 0,
+        "action_restart": 1,
+        "action_session_start": 2,
+        "action_default_fallback": 3,
+        "action_deactivate_loop": 4,
+        "action_revert_fallback_events": 5,
+        "action_default_ask_affirmation": 6,
+        "action_default_ask_rephrase": 7,
+        "action_two_stage_fallback": 8,
+        "action_unlikely_intent": 9,
+        "action_back": 10,
+        "...": 11,
+        "action_extract_slots": 12,
+        "action_show_categories_with_products": 13,
+        "action_search_products": 14,
+        "action_select_product": 15,
+        "action_add_to_cart": 16,
+        "action_view_cart": 17,
+        "action_checkout": 18,
+        "action_track_order": 19,
+        "action_get_address": 20,
+        "action_create_stripe_checkout": 21,
+        "action_check_payment_status": 22,
+        "utter_default": 23,
+        "utter_faq": 24,
+        "utter_goodbye": 25,
+        "utter_greet": 26,
+        "utter_iamabot": 27
+      },
+      "entities": {
+        "order_id": 0,
+        "product_category": 1,
+        "product_name": 2,
+        "product_title": 3
+      },
+      "slots": {},
+      "active_loop": {}
+    }
+  },
+  "remove_duplicates": true,
+  "max_history": 5
+}
