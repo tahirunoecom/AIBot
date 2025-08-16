@@ -11,6 +11,7 @@ import stripe
 from rasa_sdk import Action, Tracker
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.events import SlotSet, EventType
+from rasa_sdk.events import FollowupAction
 from rasa_sdk.forms import FormValidationAction
 
 
@@ -161,9 +162,45 @@ class ActionSelectProduct(Action):
         return "action_select_product"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[Dict]:
+        # If we are in the middle of the login process, delegate the input to the login handler
+        if tracker.get_slot("login_step"):
+            try:
+                login_action = ActionLoginUser()
+                return login_action.run(dispatcher, tracker, domain)
+            except Exception:
+                return [FollowupAction("action_login_user")]
         user_text = tracker.latest_message.get("text", "").strip().lower()
         recent_products_json = tracker.get_slot("recent_products")
+
+        # If we are currently in the store selection context, always delegate to
+        # ActionSetSelectedStore, regardless of whether recent_products is set.
+        # This prevents store numbers from being interpreted as product numbers.
+        if tracker.get_slot("store_context"):
+            try:
+                store_action = ActionSetSelectedStore()
+                return store_action.run(dispatcher, tracker, domain)
+            except Exception:
+                return [FollowupAction("action_set_selected_store")]
+
+        # If there are no recent products displayed (and not in store context)
         if not recent_products_json:
+            # Otherwise, if we currently have a list of stores to select from
+            stores_list = tracker.get_slot("stores_list")
+            if stores_list:
+                try:
+                    store_action = ActionSetSelectedStore()
+                    return store_action.run(dispatcher, tracker, domain)
+                except Exception:
+                    return [FollowupAction("action_set_selected_store")]
+            # If the user input is a 5-digit zip code, trigger nearest store search
+            if re.fullmatch(r"\d{5}", user_text):
+                return [
+                    SlotSet("zipcode", user_text),
+                    SlotSet("stores_list", None),
+                    SlotSet("selected_store", None),
+                    FollowupAction("action_get_nearest_store")
+                ]
+            # No context; prompt to search products
             dispatcher.utter_message(text="I don't have any recently shown products to select from. Please search for products first.")
             return []
         try:
@@ -244,10 +281,11 @@ class ActionAddToCart(Action):
         domain: Dict[Text, Any],
     ) -> List[Dict]:
 
-        # Get user_id; if not present or not a string, send blank string (not a user utterance!)
+        # Require login: user_id must be set and numeric
         user_id = tracker.get_slot("user_id")
-        if user_id is None or not isinstance(user_id, str) or not user_id.isdigit():
-            user_id = "253"
+        if not user_id or not isinstance(user_id, str) or not user_id.isdigit():
+            dispatcher.utter_message(text="You need to log in before adding a product to your cart. Please type 'login' to log in.")
+            return [FollowupAction("action_prompt_login")]
 
         selected_product_json = tracker.get_slot("selected_product")
         if not selected_product_json:
@@ -309,9 +347,10 @@ class ActionViewCart(Action):
         self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]
     ) -> List[Dict]:
         user_id = tracker.get_slot("user_id")
-        # If user_id is not a digit string, send it as blank or 253 for testing
-        if not (isinstance(user_id, str) and user_id.isdigit()):
-            user_id = "253"
+        # Require login: if user_id is missing or not numeric, prompt login
+        if not user_id or not isinstance(user_id, str) or not user_id.isdigit():
+            dispatcher.utter_message(text="You need to log in before viewing your cart. Please type 'login' to log in.")
+            return [FollowupAction("action_prompt_login")]
 
         payload = {"user_id": user_id, "coupon_id": ""}
 
@@ -410,6 +449,132 @@ class ActionCheckout(Action):
             dispatcher.utter_message(text="An error occurred during checkout.")
         return []
 
+# ---------------------------------------------------------------------------
+# Custom fallback action to handle ambiguous user input gracefully.  When the
+# NLU model is uncertain (intent nlu_fallback), this action determines
+# whether the user has provided a 5‑digit ZIP code.  If so, it populates the
+# `zipcode` slot and triggers a store search via a follow‑up action.
+# Otherwise, it falls back to the generic default message.
+class ActionCustomFallback(Action):
+    def name(self) -> Text:
+        return "action_custom_fallback"
+
+    def run(
+        self,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: Dict[Text, Any],
+    ) -> List[EventType]:
+        # Grab the raw text of the user’s latest message
+        user_text = (tracker.latest_message.get("text") or "").strip()
+        # If it's a 5‑digit number and no ZIP code has been set yet, treat it as
+        # a zip code input and jump directly to the nearest store search.
+        if re.fullmatch(r"\d{5}", user_text) and not tracker.get_slot("zipcode"):
+            return [
+                SlotSet("zipcode", user_text),
+                SlotSet("stores_list", None),
+                SlotSet("selected_store", None),
+                FollowupAction("action_get_nearest_store"),
+            ]
+        # Otherwise, respond with the default fallback message
+        dispatcher.utter_message(text="Sorry, I didn't understand that. Could you rephrase?")
+        return []
+
+# ---------------------------------------------------------------------------
+# Prompt the user to log in by asking for a user identifier.  This action
+# informs the user that a login is required and requests their user ID.  It
+# does not perform any API calls; the next user utterance should be handled
+# by the `provide_user_id` intent, which will trigger `ActionLoginUser`.
+class ActionPromptLogin(Action):
+    def name(self) -> Text:
+        return "action_prompt_login"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict) -> List[EventType]:
+        # Offer the user the option to log in or register.  For new users we
+        # recommend visiting the sign‑up page; returning users can choose to
+        # log in via chat.
+        dispatcher.utter_message(text="You need to log in to continue. If you already have an account, please choose 'Login' and we'll ask for your phone and password. If you're new, choose 'Register' to sign up on our website.",
+                                 buttons=[
+                                     {"title": "Login", "payload": "login"},
+                                     {"title": "Register", "payload": "register"}
+                                 ])
+        return []
+
+# ---------------------------------------------------------------------------
+# Handle user login by capturing a numeric user ID.  In a real implementation,
+# this action would call an authentication API.  Here we simply validate
+# that the provided ID is numeric and store it in the `user_id` slot.
+class ActionLoginUser(Action):
+    def name(self) -> Text:
+        return "action_login_user"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict) -> List[EventType]:
+        user_text = (tracker.latest_message.get("text") or "").strip()
+        login_step = tracker.get_slot("login_step")
+        login_phone = tracker.get_slot("login_phone")
+        # Step 1: ask for phone number
+        if not login_step:
+            # Initialize login process
+            dispatcher.utter_message(text="Please enter your phone number:")
+            return [SlotSet("login_step", "awaiting_phone")]
+        elif login_step == "awaiting_phone":
+            # Save phone and ask for password
+            dispatcher.utter_message(text="Thanks. Now enter your password:")
+            return [SlotSet("login_phone", user_text), SlotSet("login_step", "awaiting_password")]
+        elif login_step == "awaiting_password":
+            # We have phone and password; call the login API
+            phone = login_phone or ""
+            password = user_text
+            # Construct payload based on provided phone and password
+            payload = {
+                "phone": phone,
+                "password": password,
+                "iosDeviceToken": "",  # Can be left empty or filled in if needed
+                "androidDeviceToken": ""
+            }
+            try:
+                url = f"{API_BASE}/customer-phone-login"
+                response = requests.post(url, json=payload, timeout=8)
+                resp_json = response.json()
+                # Check success: status==1? But provided example returns status 0 for verification required.  If user_id is returned, login succeeded.
+                if resp_json.get("status") == 1 and resp_json.get("user_id"):
+                    user_id_value = str(resp_json.get("user_id"))
+                    dispatcher.utter_message(text="Login successful!")
+                    return [SlotSet("user_id", user_id_value), SlotSet("login_step", None), SlotSet("login_phone", None)]
+                else:
+                    # If status 0 or user_id missing, instruct user to verify or check credentials
+                    message = resp_json.get("message", "Login failed. Please check your credentials or verify your account.")
+                    dispatcher.utter_message(text=message)
+                    # Reset login process
+                    return [SlotSet("login_step", None), SlotSet("login_phone", None)]
+            except Exception as e:
+                dispatcher.utter_message(text="An error occurred while logging in. Please try again later.")
+                return [SlotSet("login_step", None), SlotSet("login_phone", None)]
+        else:
+            # Unknown state; reset login
+            dispatcher.utter_message(text="Let's start over. Please type 'login' to begin the login process.")
+            return [SlotSet("login_step", None), SlotSet("login_phone", None)]
+
+
+# ---------------------------------------------------------------------------
+# Custom greet action that checks if a login process is in progress.  If
+# so, it delegates the input to the login handler instead of greeting.
+class ActionCustomGreet(Action):
+    def name(self) -> Text:
+        return "action_custom_greet"
+
+    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[EventType]:
+        # If a login process is active, continue the login flow
+        if tracker.get_slot("login_step"):
+            try:
+                login_action = ActionLoginUser()
+                return login_action.run(dispatcher, tracker, domain)
+            except Exception:
+                return [FollowupAction("action_login_user")]
+        # Otherwise, send the standard greeting message
+        dispatcher.utter_message(text="Welcome to AnythingInstantly! How can I help you today?")
+        return []
+
 
 class ActionTrackOrder(Action):
     def name(self) -> Text:
@@ -445,7 +610,11 @@ class ActionGetAddress(Action):
         tracker: Tracker,
         domain: Dict[Text, Any],
     ) -> List[Dict]:
-        user_id = tracker.get_slot("user_id") or "253"
+        user_id = tracker.get_slot("user_id")
+        # Require login: if user_id missing or invalid, prompt login
+        if not user_id or not isinstance(user_id, str) or not user_id.isdigit():
+            dispatcher.utter_message(text="You need to log in to view your address. Please type 'login' to log in.")
+            return [FollowupAction("action_prompt_login")]
         shipper_id = ""
         address_id = 306
 
@@ -522,7 +691,11 @@ class ActionCreateStripeCheckout(Action):
     def run(self, dispatcher: CollectingDispatcher,
             tracker: Tracker,
             domain: Dict[Text, any]) -> List[Dict]:
-        
+        # Require login: ensure user_id is available before proceeding to payment
+        user_id = tracker.get_slot("user_id")
+        if not user_id or not isinstance(user_id, str) or not user_id.isdigit():
+            dispatcher.utter_message(text="You must be logged in to proceed with payment. Please type 'login' to log in.")
+            return [FollowupAction("action_prompt_login")]
         # Set your TEST secret key here
         stripe.api_key = "sk_test_hvOUO0fHa8UL59XCgdhFWKFb"  # Use your test secret key
 
@@ -603,6 +776,27 @@ class ActionCheckPaymentStatus(Action):
 
         return []
 
+# New action to handle changing the user's ZIP code.
+# When invoked, this action clears the existing zipcode slot so the bot
+# will ask for a new code on the next store search.  It also clears
+# related store context to avoid confusion.
+class ActionChangeZipcode(Action):
+    def name(self) -> Text:
+        return "action_change_zipcode"
+
+    def run(
+        self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict
+    ) -> List[EventType]:
+        # Clear the zipcode and related store slots
+        dispatcher.utter_message(text="Sure, please provide your 5-digit ZIP code.")
+        return [
+            SlotSet("zipcode", None),
+            SlotSet("stores_list", None),
+            SlotSet("selected_store", None),
+            SlotSet("store_context", False),
+            SlotSet("recent_products", None)
+        ]
+
 class ActionProductLLMSearch(Action):
     def name(self) -> str:
         return "action_product_llm_search"
@@ -610,13 +804,24 @@ class ActionProductLLMSearch(Action):
     def run(self, dispatcher: CollectingDispatcher,
             tracker: Tracker,
             domain: dict) -> list:
+        # Intercept "near me" queries to perform a store search instead of product search.
+        user_query = tracker.latest_message.get("text", "").strip()
+        if user_query and "near" in user_query.lower():
+            # If the message indicates a proximity search, delegate to ActionGetNearestStore
+            try:
+                # Use the ActionGetNearestStore defined in this module
+                store_action = ActionGetNearestStore()
+                return store_action.run(dispatcher, tracker, domain)
+            except Exception as e:
+                print(f"[EXCEPTION] delegating to ActionGetNearestStore: {e}")
+                # If delegation fails, fall back to product search
+                pass
 
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             dispatcher.utter_message(text="OpenAI API key not configured. Please contact administrator.")
             return []
 
-        user_query = tracker.latest_message.get("text", "").strip()
         if not user_query:
             dispatcher.utter_message(text="Please tell me what product or category you want to search for.")
             return []
@@ -807,59 +1012,170 @@ class ValidateZipcodeForm(FormValidationAction):
 
 
 class ActionGetNearestStore(Action):
+    """Fetch the nearest stores using the StageShipper API.
+
+    The StageShipper backend exposes an endpoint `/getNearestStore` that
+    accepts a JSON payload with an `address` object containing the ZIP
+    code and an optional search string.  This action calls that API,
+    parses the response, and presents up to five store options to the
+    user.  If no stores are found or an error occurs, the user is
+    informed accordingly.
+    """
+
     def name(self) -> Text:
         return "action_get_nearest_store"
 
     def run(
         self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict
     ) -> List[EventType]:
-
         zipcode = tracker.get_slot("zipcode")
-        if not zipcode:
-            # Ask for zipcode if missing
-            dispatcher.utter_message(text="Please provide your 5-digit ZIP code first.")
+        user_text = (tracker.latest_message.get("text") or "").strip()
+        # If currently collecting login credentials, redirect to login handler
+        if tracker.get_slot("login_step"):
+            return [FollowupAction("action_login_user")]
+
+        # If the user explicitly types 'login' or 'register', redirect to the appropriate flow.
+        lower_text = user_text.lower()
+        if lower_text in ["login", "log in", "log me in", "sign in"]:
+            return [FollowupAction("action_login_user")]
+        if lower_text in ["register", "sign up", "create account", "new user registration"]:
+            dispatcher.utter_message(text="Sure, here is the sign‑up page:\nhttps://stage.anythinginstantly.com")
             return []
 
-        # Optional: get store search string if user mentioned
-        latest_message = tracker.latest_message.get("text", "")
-        # You can extract store name from entity or intent if NLU setup supports that, else pass empty
+        # If the user input is a number and not a full 5‑digit ZIP code, decide
+        # whether it refers to a store or a product based on context.  This
+        # handles misclassified intents (e.g. when Rasa predicts search_store
+        # instead of select_store/select_product).
+        if user_text.isdigit() and not re.fullmatch(r"\d{5}", user_text):
+            # If we still have a store list or store context, treat it as store selection
+            if tracker.get_slot("store_context") or tracker.get_slot("stores_list"):
+                try:
+                    store_action = ActionSetSelectedStore()
+                    return store_action.run(dispatcher, tracker, domain)
+                except Exception:
+                    return [FollowupAction("action_set_selected_store")]
+            # Otherwise, if we have a product list, treat it as product selection
+            recent_products_json = tracker.get_slot("recent_products")
+            if recent_products_json:
+                try:
+                    product_action = ActionSelectProduct()
+                    return product_action.run(dispatcher, tracker, domain)
+                except Exception:
+                    return [FollowupAction("action_select_product")]
+
+        # If zipcode is not yet stored, attempt to capture it from the latest message.
+        if not zipcode:
+            # If the user just typed a 5‑digit number, treat it as the ZIP code
+            if re.fullmatch(r"\d{5}", user_text):
+                zipcode = user_text
+            else:
+                dispatcher.utter_message(text="Please provide your 5-digit ZIP code first.")
+                return []
+
+        # Extract store search keyword if provided
         store_search_string = None
-        entities = tracker.latest_message.get("entities", [])
-        for ent in entities:
+        for ent in tracker.latest_message.get("entities", []):
             if ent.get("entity") == "store_name":
                 store_search_string = ent.get("value")
                 break
 
-        # Call your getNearestStore API:
-        api_url = "https://your-api-endpoint/getNearestStore"
-        params = {
-            "zipcode": zipcode,
-            "search_string": store_search_string or ""
+        payload = {
+            "address": {
+                "store_type_id": "",
+                "zip": str(zipcode),
+                "search_string": store_search_string or "",
+                "page": "0",
+                "items": "20"
+            }
         }
 
+        url = f"{API_BASE}/getNearestStore"
         try:
-            response = requests.get(api_url, params=params)
+            response = requests.post(url, json=payload, timeout=8)
             response.raise_for_status()
-            stores = response.json().get("stores", [])
+            data = response.json() or {}
 
-            if not stores:
-                dispatcher.utter_message(text="Sorry, no stores found near this ZIP code. Would you like to try a different ZIP code?")
-                # Optionally reset ZIP or store slots
-                return [SlotSet("selected_store", None)]
+            # StageShipper returns stores under data.getNearestStore
+            stores = []
+            if isinstance(data, list):
+                stores = data
+            elif isinstance(data, dict):
+                # Most StageShipper APIs return a dict with 'status', 'code', 'message', and 'data'
+                nested = data.get("data") or {}
+                # Check for 'getNearestStore' inside 'data'
+                if isinstance(nested, dict) and nested.get("getNearestStore"):
+                    stores = nested.get("getNearestStore")
+                # Fallback to keys like 'stores' or direct list
+                if not stores:
+                    stores = nested.get("stores") if isinstance(nested, dict) else []
+                if not stores and isinstance(nested, list):
+                    stores = nested
 
-            # Store the list in tracker or return first page (for demo we show first 3)
-            store_list_text = "Found these stores in your area:\n"
-            for idx, store in enumerate(stores[:5], start=1):
-                store_list_text += f"{idx}. {store.get('name')} - {store.get('address')}\n"
+            # Normalize store objects to preserve essential fields used later, such as
+            # wh_account_id and the store_name value used for product search.  We
+            # include `name` (for display), `address`, `wh_account_id` and
+            # `store_name` so that ActionSetSelectedStore can fetch products from
+            # the selected store.  If additional fields are required later (e.g.
+            # store_icon or store_type), they can be added here as well.
+            store_dicts: List[Dict[str, Any]] = []
+            for s in stores:
+                if not isinstance(s, dict):
+                    continue
+                # Determine display name; fall back to 'Unknown Store'
+                name = s.get("store_name") or s.get("name") or "Unknown Store"
+                # Compose full address from available fields
+                addr = s.get("address") or s.get("address1") or ""
+                city = s.get("city") or ""
+                state = s.get("state") or ""
+                zipcode_resp = s.get("zipcode") or s.get("zip") or ""
+                parts: List[str] = []
+                for part in [addr, city, state, zipcode_resp]:
+                    if part:
+                        parts.append(str(part))
+                full_address = ", ".join(parts)
 
-            dispatcher.utter_message(text=store_list_text)
+                # Retrieve wh_account_id if present; fallback to empty string
+                wh_account_id = s.get("wh_account_id") or s.get("wh_account_id") or ""
+                # Keep the raw store_name (if different from display name) to
+                # supply as the search_string to getMasterProducts
+                store_name_raw = s.get("store_name") or s.get("name") or ""
+
+                # Build a dictionary preserving the above fields.  Additional
+                # properties from the API response are ignored to reduce payload
+                # size but can be kept if needed.
+                store_dicts.append({
+                    "name": str(name),
+                    "address": full_address,
+                    "wh_account_id": wh_account_id,
+                    "store_name": store_name_raw
+                })
+            # Filter by search string if provided (after API call, to refine further)
+            if store_search_string:
+                store_dicts = [s for s in store_dicts if store_search_string.lower() in s["name"].lower()]
+
+            if not store_dicts:
+                dispatcher.utter_message(
+                    text="Sorry, no stores found for this ZIP code. Would you like to try a different ZIP code?"
+                )
+                return [SlotSet("stores_list", []), SlotSet("selected_store", None)]
+
+            # Present up to 5 stores
+            lines = []
+            for idx, store in enumerate(store_dicts[:5], start=1):
+                lines.append(f"{idx}. {store['name']} - {store['address']}")
+            dispatcher.utter_message(text="Found these stores in your area:\n" + "\n".join(lines))
             dispatcher.utter_message(text="Please select a store by typing its option number or name.")
 
-            # Save the list in a slot or temp memory if you want to validate selection later
-            # For now, return slot updated for selected_store as None to wait for next input
-            return [SlotSet("stores_list", stores), SlotSet("selected_store", None)]
+            return [
+                SlotSet("zipcode", zipcode),
+                SlotSet("stores_list", store_dicts),
+                SlotSet("recent_products", json.dumps(store_dicts)),
+                SlotSet("store_context", True),
+                SlotSet("selected_store", None)
+            ]
 
-        except requests.RequestException:
+        except Exception as e:
+            print(f"[EXCEPTION] in ActionGetNearestStore: {e}")
             dispatcher.utter_message(text="Sorry, I am facing issues fetching stores right now. Please try again later.")
             return []
 
@@ -873,7 +1189,33 @@ class ActionSetSelectedStore(Action):
     ) -> List[EventType]:
 
         selected_text = tracker.latest_message.get("text")
-        stores = tracker.get_slot("stores_list") or []
+
+        # If we are not currently in a store selection context (store_context is False)
+        # but we do have a list of recent products, then a numeric selection should
+        # correspond to a product rather than a store.  This handles cases where
+        # the NLU incorrectly classifies the intent as select_store instead of
+        # select_product.  In that case, delegate to ActionSelectProduct.
+        if not tracker.get_slot("store_context"):
+            recent_products_json = tracker.get_slot("recent_products")
+            stores = tracker.get_slot("stores_list")
+            # Only treat as product selection if there is a product list and no
+            # store list available.  We also check that the input is digit.
+            if recent_products_json and (stores is None or stores == []) and selected_text and selected_text.strip().isdigit():
+                try:
+                    product_action = ActionSelectProduct()
+                    return product_action.run(dispatcher, tracker, domain)
+                except Exception:
+                    return [FollowupAction("action_select_product")]
+        # Retrieve the list of stores either from the stores_list slot (preferred) or
+        # from recent_products if it contains store data.  This makes store
+        # selection resilient even if stores_list slot is undefined in the domain.
+        stores = tracker.get_slot("stores_list")
+        if not stores:
+            recent_products_json = tracker.get_slot("recent_products")
+            try:
+                stores = json.loads(recent_products_json) if recent_products_json else []
+            except Exception:
+                stores = []
 
         if not stores:
             dispatcher.utter_message(text="I don't have any store list in memory, please search for stores first.")
@@ -896,7 +1238,84 @@ class ActionSetSelectedStore(Action):
         if selected_store:
             dispatcher.utter_message(text=f"You have selected {selected_store.get('name')} located at {selected_store.get('address')}.")
             # Set slot with minimal store info - you can customize as per your store object structure
-            return [SlotSet("selected_store", selected_store), SlotSet("store_context", True)]
+            events: List[EventType] = [
+                SlotSet("selected_store", selected_store),
+                SlotSet("store_context", True)
+            ]
+
+            # After selecting a store, fetch products specific to that store using getMasterProducts
+            try:
+                # The store dictionary preserves wh_account_id and the raw store_name.
+                # Prefer 'store_name' for search_string; fall back to display name.
+                wh_account_id = selected_store.get("wh_account_id") or ""
+                store_name = selected_store.get("store_name") or selected_store.get("name") or ""
+                zipcode = tracker.get_slot("zipcode") or ""
+                user_id = tracker.get_slot("user_id") or ""
+
+                # To fetch products for the selected store, search_string should be
+                # left blank.  Passing the store_name here would cause the API
+                # to search for products containing that term rather than
+                # filtering by the store.  See the API specification.
+                search_payload = {
+                    "wh_account_id": str(wh_account_id),
+                    "upc": "",
+                    "ai_category_id": "",
+                    "ai_product_id": "",
+                    "product_id": "",
+                    "search_string": "",
+                    "zipcode": str(zipcode),
+                    "user_id": str(user_id),
+                    "page": "1",
+                    "items": "5"
+                }
+                # Call getMasterProducts API to fetch products for the selected store
+                products_resp = requests.post(f"{API_BASE}/getMasterProducts", json=search_payload, timeout=8)
+                products_data = products_resp.json()
+                # Parse products list; handle both list and dict formats
+                product_list = []
+                if isinstance(products_data, list):
+                    product_list = products_data
+                elif isinstance(products_data, dict):
+                    # Extract from known key
+                    pdata = products_data.get("data") or products_data.get("getMasterProducts") or products_data.get("products")
+                    if isinstance(pdata, list):
+                        product_list = pdata
+                    elif isinstance(pdata, dict):
+                        product_list = pdata.get("getMasterProducts", []) or pdata.get("products", [])
+                # Prepare message for products
+                if product_list:
+                    lines = []
+                    for idx, p in enumerate(product_list[:5], start=1):
+                        title = p.get("title") or p.get("product_name") or "Unnamed Product"
+                        price = p.get("discounted_price") or p.get("product_price") or "-"
+                        price_str = f"₹{price}"
+                        desc = p.get("description", "").strip()
+                        if len(desc) > 80:
+                            desc = desc[:80] + "…"
+                        lines.append(f"{idx}. **{title}**\n{price_str}\n{desc}")
+                    msg = "🛒 **Products available in this store:**\n\n" + "\n\n".join(lines) + "\n\n➡️ Reply with the product number to see details."
+                    dispatcher.utter_message(text=msg)
+                    # Save to recent_products slot
+                    events.append(SlotSet("recent_products", json.dumps(product_list)))
+                    # Reset search_page for next
+                    events.append(SlotSet("search_page", 1))
+                    # Exit store context after presenting store products so that
+                    # subsequent number selections are treated as product choices
+                    events.append(SlotSet("store_context", False))
+                    # Clear the stores_list slot so that product selections are not
+                    # interpreted as store selections on subsequent digit inputs
+                    events.append(SlotSet("stores_list", None))
+                else:
+                    dispatcher.utter_message(text="Sorry, I couldn't find any products for this store.")
+                    # Clear recent_products and exit store context since there is no product list
+                    events.append(SlotSet("recent_products", None))
+                    events.append(SlotSet("store_context", False))
+                    # Also clear store list since we are leaving store selection
+                    events.append(SlotSet("stores_list", None))
+            except Exception as e:
+                print(f"[EXCEPTION] fetching products for selected store: {e}")
+                dispatcher.utter_message(text="An error occurred while fetching products for this store.")
+            return events
 
         else:
             dispatcher.utter_message(text="Sorry, I couldn't find a matching store. Please try again or enter a different name.")
@@ -920,3 +1339,31 @@ class ActionRecallPreviousLocation(Action):
         else:
             dispatcher.utter_message(text="Welcome! How can I assist you today?")
             return []
+
+
+# Additional action to display store options when the rule triggers it.  This
+# action reads the 'stores_list' slot and sends a numbered list of stores
+# similar to how ActionGetNearestStore does.  It is referenced by the
+# 'Ask for store selection if multiple stores found' rule in rules.yml.
+class ActionShowStoreOptions(Action):
+    def name(self) -> Text:
+        return "action_show_store_options"
+
+    def run(
+        self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict
+    ) -> List[EventType]:
+        stores = tracker.get_slot("stores_list") or []
+        if not stores or not isinstance(stores, list):
+            dispatcher.utter_message(text="I don't have any stores to show. Please search for stores first.")
+            return []
+
+        store_lines = []
+        for idx, store in enumerate(stores[:5], start=1):
+            name = store.get("name", "Unknown Store")
+            address = store.get("address", "")
+            store_lines.append(f"{idx}. {name} - {address}")
+
+        store_list_text = "Found these stores in your area:\n" + "\n".join(store_lines)
+        dispatcher.utter_message(text=store_list_text)
+        dispatcher.utter_message(text="Please select a store by typing its option number or name.")
+        return []

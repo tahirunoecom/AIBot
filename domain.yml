@@ -22,6 +22,9 @@ intents:
   - select_store
   - change_zipcode
   - change_store
+  - login
+  - provide_user_id
+  - register
 
 entities:
   - product_category
@@ -66,7 +69,9 @@ slots:
     type: text
     influence_conversation: false
     mappings:
-      - type: custom
+      # Automatically fill the zipcode slot when the user provides a 5‑digit code
+      - type: from_entity
+        entity: zipcode
   last_zipcode:
     type: text
     influence_conversation: false
@@ -82,6 +87,38 @@ slots:
     influence_conversation: false
     mappings:
       - type: custom
+
+  # Slots used during the login process.  These track the current step
+  # (awaiting phone or password) and store the values until the login
+  # process is completed.
+  login_step:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  login_phone:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+  login_password:
+    type: text
+    influence_conversation: false
+    mappings:
+      - type: custom
+
+  # Stores returned by the nearest store search.  This slot is used to keep
+  # the list of stores shown to the user so that a subsequent numeric or
+  # name input can be mapped back to a specific store.  Without this slot,
+  # Rasa will raise an error when the bot tries to set it.  If the slot
+  # already exists in your domain, this duplication will not change the
+  # behaviour.
+  stores_list:
+    type: list
+    influence_conversation: false
+    mappings:
+      - type: custom
+
 
 responses:
   utter_greet:
@@ -152,6 +189,11 @@ responses:
         Sorry, I couldn't find a matching store.
         Please try again or enter a different name.
 
+  utter_register_link:
+    - text: |
+        You can create a new account by visiting our sign‑up page:
+        https://stage.anythinginstantly.com
+
 actions:
   - action_show_categories_with_products
   - action_select_product
@@ -169,3 +211,9 @@ actions:
   - action_get_nearest_store
   - action_set_selected_store
   - action_recall_previous_location
+  - action_show_store_options
+  - action_change_zipcode
+  - action_custom_fallback
+  - action_prompt_login
+  - action_login_user
+  - action_custom_greet

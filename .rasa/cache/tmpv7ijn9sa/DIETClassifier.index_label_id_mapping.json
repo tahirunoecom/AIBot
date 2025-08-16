@@ -1,0 +1,22 @@
+{
+  "0": "add_to_cart",
+  "1": "bot_challenge",
+  "2": "change_store",
+  "3": "change_zipcode",
+  "4": "check_payment_status",
+  "5": "checkout",
+  "6": "faq",
+  "7": "get_address",
+  "8": "goodbye",
+  "9": "greet",
+  "10": "pay_now",
+  "11": "provide_zipcode",
+  "12": "search_products",
+  "13": "search_products_next",
+  "14": "search_store",
+  "15": "select_product",
+  "16": "select_store",
+  "17": "show_categories",
+  "18": "track_order",
+  "19": "view_cart"
+}

@@ -2,12 +2,12 @@ version: "3.1"
 
 stories:
 
-- story: greet and show categories
-  steps:
-  - intent: greet
-  - action: utter_greet
-  - intent: show_categories
-  - action: action_show_categories_with_products
+    # Note: Greeting is now handled entirely by a rule (Respond to greeting)
+    # and a custom action that manages login context.  We no longer
+    # include an explicit story for greeting here to avoid conflicts
+    # between rules and stories.  When a user greets, the rule will
+    # trigger `action_custom_greet`.  The user can then explicitly
+    # ask to see categories via the `show_categories` intent.
 
 - story: view cart and checkout
   steps:

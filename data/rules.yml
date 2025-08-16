@@ -15,7 +15,7 @@ rules:
 - rule: Handle fallback
   steps:
   - intent: nlu_fallback
-  - action: utter_default
+  - action: action_custom_fallback
 
 - rule: Show categories on user request
   steps:
@@ -69,21 +69,17 @@ rules:
     - action: action_reset_search_page
     - action: action_product_llm_search
 
-- rule: Ask for ZIP code if missing when store context needed
-  condition:
-  - slot_was_set:
-    - store_context: false
+# Handle store searches by directly invoking the nearest-store action.  The action
+# will prompt for a ZIP code if none is available.
+- rule: Search for nearest store
   steps:
   - intent: search_store
-  - action: zipcode_form
-  - active_loop: zipcode_form
+  - action: action_get_nearest_store
 
-- rule: Submit ZIP code form and proceed to get stores
-  condition:
-  - active_loop: zipcode_form
+# When the user provides a ZIP code (provide_zipcode intent), call the nearest-store action
+- rule: Provide ZIP code and get nearest store
   steps:
-  - action: zipcode_form
-  - active_loop: null
+  - intent: provide_zipcode
   - action: action_get_nearest_store
 
 - rule: Ask for store selection if multiple stores found
@@ -95,12 +91,38 @@ rules:
   - intent: select_store
   - action: action_set_selected_store
 
+# If the user wants to change the ZIP code, clear the existing value and prompt for a new one.
 - rule: Handle user wanting to change ZIP code mid-conversation
   steps:
   - intent: change_zipcode
-  - action: zipcode_form
+  - action: action_change_zipcode
 
 - rule: Handle user wanting to change store mid-conversation
   steps:
   - intent: change_store
   - action: action_get_nearest_store
+
+# Provide registration link when the user asks to register
+- rule: Provide registration link
+  steps:
+  - intent: register
+  - action: utter_register_link
+
+
+# Handle login when the user asks to log in
+- rule: Handle login
+  steps:
+  - intent: login
+  - action: action_login_user
+
+# Handle user providing their user ID after being prompted to log in
+- rule: Handle user ID for login
+  steps:
+  - intent: provide_user_id
+  - action: action_login_user
+
+# Respond to greetings
+- rule: Respond to greeting
+  steps:
+  - intent: greet
+  - action: action_custom_greet

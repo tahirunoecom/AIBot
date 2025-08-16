@@ -4,10 +4,18 @@ nlu:
 - intent: greet
   examples: |
     - hello
+    - Hello
     - hi
+    - Hi
     - hey
     - good morning
     - good evening
+    - hi there
+    - hello there
+    - greetings
+    - howdy
+    - hello!
+    - hi there!
 
 - intent: show_categories
   examples: |
@@ -37,20 +45,13 @@ nlu:
 
 - intent: select_product
   examples: |
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    - 20
-    - 50
-    - 100
     - select 1
     - select 5
     - choose 3
     - I want product 2
     - pick 50
-    - show me 7
+    - please choose number 4
+    - I'd like number 2
 
 - intent: add_to_cart
   examples: |
@@ -172,6 +173,9 @@ nlu:
     - My ZIP code is 10001
     - It's 30301
     - 94105
+    - 08852
+    - 08810
+    - 08824
       
 - intent: change_zipcode
   examples: |
@@ -185,10 +189,20 @@ nlu:
     - I want to buy from Walmart
     - Find Taco Bell
     - Check for Target store
+    - show me Starbucks near me
+    - show me R barbershop near me
+    - show me R barber shop
+    - show me [R barbershop](store_name) near me
+    - show me [Starbucks](store_name) near me
+    - show me Nawab Grill near me
+    - show me "Nawab Grill" near me
+    - show me [Nawab Grill](store_name) near me
+    - I want to search for a store near me
+    - search for a nearby store
+    - find me a store near me
       
 - intent: select_store
   examples: |
-    - 1
     - Option 2
     - Number three
     - I'd like the first store
@@ -200,3 +214,35 @@ nlu:
     - Select a different store
     - Change the restaurant
     - Choose another store
+
+# Prompt the bot to start the login flow
+- intent: login
+  examples: |
+    - login
+    - log in
+    - log me in
+    - I want to log in
+    - sign in
+    - sign me in
+    - I need to log in
+    - log me in please
+    - log me in now
+    - I need to sign in
+    - let me login
+
+# Provide the user ID for login (we assume a simple numeric ID for now)
+- intent: provide_user_id
+  examples: |
+    - my user id is 253
+    - user id 123
+    - it is 456
+    - 789
+    - 1024
+
+- intent: register
+  examples: |
+    - register
+    - sign up
+    - create account
+    - I want to register
+    - new user registration
