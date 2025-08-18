@@ -44,3 +44,12 @@ stories:
   - action: action_get_nearest_store
   - intent: select_store
   - action: action_set_selected_store
+
+- story: Successful login flow
+  steps:
+  - intent: login
+  - action: action_login_user
+  - intent: inform
+  - action: action_login_user
+  - intent: provide_password
+  - action: action_login_user

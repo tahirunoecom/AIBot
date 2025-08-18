@@ -149,3 +149,18 @@ rules:
   steps:
   - action: action_prompt_login
   - action: action_listen
+
+- rule: Handle next store page
+  steps:
+  - intent: next_store_page
+  - action: action_next_store_page
+
+- rule: Handle previous store page
+  steps:
+  - intent: previous_store_page
+  - action: action_previous_store_page
+
+- rule: Handle previous product page
+  steps:
+  - intent: previous_product_page
+  - action: action_previous_product_page

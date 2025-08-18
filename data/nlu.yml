@@ -215,6 +215,24 @@ nlu:
     - Change the restaurant
     - Choose another store
 
+- intent: next_store_page
+  examples: |
+    - next stores
+    - more stores
+    - next store page
+
+- intent: previous_store_page
+  examples: |
+    - previous stores
+    - back to last stores
+    - previous store page
+
+- intent: previous_product_page
+  examples: |
+    - previous products
+    - back to last products
+    - previous product page
+
 # Prompt the bot to start the login flow
 - intent: login
   examples: |
