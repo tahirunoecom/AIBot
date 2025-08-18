@@ -144,3 +144,8 @@ rules:
   steps:
   - intent: provide_user_id
   - action: action_login_user
+
+- rule: Force listen after login prompt
+  steps:
+  - action: action_prompt_login
+  - action: action_listen
