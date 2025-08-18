@@ -136,7 +136,7 @@ rules:
     - slot_was_set:
         - login_step: awaiting_password
   steps:
-    - intent: inform
+    - intent: provide_password
     - action: action_login_user
 
 # Handle user providing their user ID after being prompted to log in

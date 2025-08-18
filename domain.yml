@@ -28,6 +28,7 @@ intents:
   - provide_user_id
   - register
   - inform
+  - provide_password
 
 # Entity types used by the NLU.  These names must match the entity
 # annotations in your training data and the parameters returned from any
@@ -127,7 +128,8 @@ slots:
     type: text
     influence_conversation: false
     mappings:
-      - type: custom
+      - type: from_text
+        intent: provide_password
   # Stores returned by the nearest store search.  This slot keeps the list
   # of stores shown to the user so that a subsequent numeric or name
   # input can be mapped back to a specific store.

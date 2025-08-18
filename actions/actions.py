@@ -535,11 +535,13 @@ class ActionLoginUser(Action):
 
         login_step = tracker.get_slot("login_step") or ""
         login_phone = tracker.get_slot("login_phone") or ""
+        login_password = tracker.get_slot("login_password") or ""
         last_message = (tracker.latest_message.get("text") or "").strip()
 
         def ask_phone() -> List[EventType]:
             dispatcher.utter_message(text="Please enter your phone number:")
-            return [SlotSet("login_step", "awaiting_phone")]
+            # Clear password slot when asking for phone to ensure a clean start
+            return [SlotSet("login_step", "awaiting_phone"), SlotSet("login_password", None)]
 
         def ask_password() -> List[EventType]:
             dispatcher.utter_message(text="Thanks. Now enter your password:")
@@ -562,8 +564,14 @@ class ActionLoginUser(Action):
 
         # 2) collect password and call API
         if login_step == "awaiting_password":
-            password = last_message
+            # Use the password from the slot, which was filled by NLU
+            password = login_password
             phone = login_phone
+
+            # Ensure we have a password to check
+            if not password:
+                dispatcher.utter_message(text="It seems you haven't provided a password. Please enter your password:")
+                return [SlotSet("login_step", "awaiting_password")]
 
             try:
                 payload = {
@@ -590,21 +598,24 @@ class ActionLoginUser(Action):
                     dispatcher.utter_message(text="Login successful!")
                     events += [SlotSet("user_id", str(user_id))]
                     # clear transient slots
-                    events += [SlotSet("login_step", None), SlotSet("login_phone", None)]
+                    events += [SlotSet("login_step", None), SlotSet("login_phone", None), SlotSet("login_password", None)]
                     return events
 
-                # e.g., verification required or wrong creds
+                # On failure, ask for the password again, not the phone.
                 msg = data.get("message") or "Login failed. Please check your phone and password."
                 dispatcher.utter_message(text=msg)
-                return ask_phone()
+                dispatcher.utter_message(text="Please try entering your password again.")
+                return [SlotSet("login_step", "awaiting_password"), SlotSet("login_password", None)]
 
-            except Exception:
+            except Exception as e:
+                print(f"[EXCEPTION] in ActionLoginUser: {e}")
                 dispatcher.utter_message(
                     text="Sorry, there was a problem contacting the login service. Please try again."
                 )
-                return ask_phone()
+                # On exception, also just ask for the password again.
+                return [SlotSet("login_step", "awaiting_password"), SlotSet("login_password", None)]
 
-        # default within login state
+        # default within login state should not be reached, but as a fallback, restart.
         return ask_phone()
 
 # ---------------------------------------------------------------------------
