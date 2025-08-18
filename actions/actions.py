@@ -465,6 +465,17 @@ class ActionCustomFallback(Action):
         tracker: Tracker,
         domain: Dict[Text, Any],
     ) -> List[EventType]:
+        # If we are currently in the middle of a login flow, delegate the message
+        # to the login handler instead of treating it as a fallback.  This
+        # prevents phone numbers or passwords from triggering the generic
+        # fallback response when misclassified.
+        if tracker.get_slot("login_step"):
+            try:
+                login_action = ActionLoginUser()
+                return login_action.run(dispatcher, tracker, domain)
+            except Exception:
+                return [FollowupAction("action_login_user")]
+
         # Grab the raw text of the user’s latest message
         user_text = (tracker.latest_message.get("text") or "").strip()
         # If it's a 5‑digit number and no ZIP code has been set yet, treat it as
@@ -504,57 +515,97 @@ class ActionPromptLogin(Action):
 # Handle user login by capturing a numeric user ID.  In a real implementation,
 # this action would call an authentication API.  Here we simply validate
 # that the provided ID is numeric and store it in the `user_id` slot.
+ 
 class ActionLoginUser(Action):
+    """Simple two-step login:
+    1) ask phone, 2) ask password, then call /customer-phone-login.
+    Stores user_id on success and resets transient slots.
+    """
+
     def name(self) -> Text:
         return "action_login_user"
 
-    def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict) -> List[EventType]:
-        user_text = (tracker.latest_message.get("text") or "").strip()
-        login_step = tracker.get_slot("login_step")
-        login_phone = tracker.get_slot("login_phone")
-        # Step 1: ask for phone number
-        if not login_step:
-            # Initialize login process
+    def run(
+        self,
+        dispatcher: CollectingDispatcher,
+        tracker: Tracker,
+        domain: Dict[Text, Any],
+    ) -> List[EventType]:
+        events: List[EventType] = []
+
+        login_step = tracker.get_slot("login_step") or ""
+        login_phone = tracker.get_slot("login_phone") or ""
+        last_message = (tracker.latest_message.get("text") or "").strip()
+
+        def ask_phone() -> List[EventType]:
             dispatcher.utter_message(text="Please enter your phone number:")
             return [SlotSet("login_step", "awaiting_phone")]
-        elif login_step == "awaiting_phone":
-            # Save phone and ask for password
-            dispatcher.utter_message(text="Thanks. Now enter your password:")
-            return [SlotSet("login_phone", user_text), SlotSet("login_step", "awaiting_password")]
-        elif login_step == "awaiting_password":
-            # We have phone and password; call the login API
-            phone = login_phone or ""
-            password = user_text
-            # Construct payload based on provided phone and password
-            payload = {
-                "phone": phone,
-                "password": password,
-                "iosDeviceToken": "",  # Can be left empty or filled in if needed
-                "androidDeviceToken": ""
-            }
-            try:
-                url = f"{API_BASE}/customer-phone-login"
-                response = requests.post(url, json=payload, timeout=8)
-                resp_json = response.json()
-                # Check success: status==1? But provided example returns status 0 for verification required.  If user_id is returned, login succeeded.
-                if resp_json.get("status") == 1 and resp_json.get("user_id"):
-                    user_id_value = str(resp_json.get("user_id"))
-                    dispatcher.utter_message(text="Login successful!")
-                    return [SlotSet("user_id", user_id_value), SlotSet("login_step", None), SlotSet("login_phone", None)]
-                else:
-                    # If status 0 or user_id missing, instruct user to verify or check credentials
-                    message = resp_json.get("message", "Login failed. Please check your credentials or verify your account.")
-                    dispatcher.utter_message(text=message)
-                    # Reset login process
-                    return [SlotSet("login_step", None), SlotSet("login_phone", None)]
-            except Exception as e:
-                dispatcher.utter_message(text="An error occurred while logging in. Please try again later.")
-                return [SlotSet("login_step", None), SlotSet("login_phone", None)]
-        else:
-            # Unknown state; reset login
-            dispatcher.utter_message(text="Let's start over. Please type 'login' to begin the login process.")
-            return [SlotSet("login_step", None), SlotSet("login_phone", None)]
 
+        def ask_password() -> List[EventType]:
+            dispatcher.utter_message(text="Thanks. Now enter your password:")
+            return [SlotSet("login_step", "awaiting_password")]
+
+        # 0) entry point when user says 'login'
+        if not login_step:
+            return ask_phone()
+
+        # 1) collect phone
+        if login_step == "awaiting_phone":
+            # accept anything with 6+ digits (keeps it forgiving)
+            if len(re.sub(r"\D", "", last_message)) >= 6 or len(last_message) >= 6:
+                events += [SlotSet("login_phone", last_message)]
+                return events + ask_password()
+            dispatcher.utter_message(
+                text="That doesn't look like a phone number. Please re-enter your phone number."
+            )
+            return [SlotSet("login_step", "awaiting_phone")]
+
+        # 2) collect password and call API
+        if login_step == "awaiting_password":
+            password = last_message
+            phone = login_phone
+
+            try:
+                payload = {
+                    "phone": phone,
+                    "password": password,
+                    "iosDeviceToken": "",
+                    "androidDeviceToken": "",
+                }
+                # your API endpoint
+                resp = requests.post(
+                    f"{API_BASE}/customer-phone-login", json=payload, timeout=15
+                )
+                data = resp.json()
+
+                # Success heuristic based on your API patterns
+                status = data.get("status", 0)
+                user_id = (
+                    data.get("user_id")
+                    or data.get("userid")
+                    or data.get("data", {}).get("user_id")
+                )
+
+                if status == 1 and user_id:
+                    dispatcher.utter_message(text="Login successful!")
+                    events += [SlotSet("user_id", str(user_id))]
+                    # clear transient slots
+                    events += [SlotSet("login_step", None), SlotSet("login_phone", None)]
+                    return events
+
+                # e.g., verification required or wrong creds
+                msg = data.get("message") or "Login failed. Please check your phone and password."
+                dispatcher.utter_message(text=msg)
+                return ask_phone()
+
+            except Exception:
+                dispatcher.utter_message(
+                    text="Sorry, there was a problem contacting the login service. Please try again."
+                )
+                return ask_phone()
+
+        # default within login state
+        return ask_phone()
 
 # ---------------------------------------------------------------------------
 # Custom greet action that checks if a login process is in progress.  If
@@ -564,15 +615,24 @@ class ActionCustomGreet(Action):
         return "action_custom_greet"
 
     def run(self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict[Text, Any]) -> List[EventType]:
-        # If a login process is active, continue the login flow
+        # If a login process is active, continue the login flow instead of greeting
         if tracker.get_slot("login_step"):
             try:
                 login_action = ActionLoginUser()
+                # Delegate to the login handler to consume the latest message
                 return login_action.run(dispatcher, tracker, domain)
             except Exception:
                 return [FollowupAction("action_login_user")]
-        # Otherwise, send the standard greeting message
-        dispatcher.utter_message(text="Welcome to AnythingInstantly! How can I help you today?")
+
+        # Only greet the user if they haven't been greeted before in this session.
+        # This prevents the greeting message from appearing repeatedly during
+        # multi‑turn flows (e.g. login) or when the user supplies inputs that
+        # accidentally trigger the `greet` intent.
+        has_been_greeted = tracker.get_slot("has_been_greeted")
+        if not has_been_greeted:
+            dispatcher.utter_message(text="Welcome to AnythingInstantly! How can I help you today?")
+            return [SlotSet("has_been_greeted", True)]
+        # If the user was already greeted, suppress additional greeting messages
         return []
 
 

@@ -246,3 +246,14 @@ nlu:
     - create account
     - I want to register
     - new user registration
+      
+# Generic "inform" for free text in forms (phone/password in our case)
+- intent: inform
+  examples: |
+    - 9971859445
+    - +1 732 555 0199
+    - 0912345678
+    - Richa@123
+    - Pass@123
+    - test1234
+    - 1362522B

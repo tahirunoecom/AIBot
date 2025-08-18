@@ -109,20 +109,38 @@ rules:
   - action: utter_register_link
 
 
-# Handle login when the user asks to log in
-- rule: Handle login
-  steps:
-  - intent: login
-  - action: action_login_user
-
-# Handle user providing their user ID after being prompted to log in
-- rule: Handle user ID for login
-  steps:
-  - intent: provide_user_id
-  - action: action_login_user
 
 # Respond to greetings
 - rule: Respond to greeting
   steps:
   - intent: greet
   - action: action_custom_greet
+  
+  
+# --- LOGIN FLOW ---
+- rule: Start login
+  steps:
+    - intent: login
+    - action: action_login_user
+
+- rule: Continue login - awaiting phone
+  condition:
+    - slot_was_set:
+        - login_step: awaiting_phone
+  steps:
+    - intent: inform
+    - action: action_login_user
+
+- rule: Continue login - awaiting password
+  condition:
+    - slot_was_set:
+        - login_step: awaiting_password
+  steps:
+    - intent: inform
+    - action: action_login_user
+
+# Handle user providing their user ID after being prompted to log in
+- rule: Handle user ID for login
+  steps:
+  - intent: provide_user_id
+  - action: action_login_user

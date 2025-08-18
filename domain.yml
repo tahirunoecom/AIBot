@@ -1,6 +1,8 @@
 ---
 version: "3.1"
 
+# List of all intents the assistant should handle.  Be sure to include
+# any intent names referenced in your stories, rules, or NLU examples.
 intents:
   - greet
   - show_categories
@@ -25,7 +27,11 @@ intents:
   - login
   - provide_user_id
   - register
+  - inform
 
+# Entity types used by the NLU.  These names must match the entity
+# annotations in your training data and the parameters returned from any
+# regex or lookup extraction.
 entities:
   - product_category
   - product_name
@@ -34,6 +40,10 @@ entities:
   - zipcode
   - store_name
 
+# Slots are used to store information about the conversation so it can
+# influence future responses.  Custom slot mappings are used here because
+# values are set explicitly in the actions rather than extracted from
+# user messages.
 slots:
   user_id:
     type: text
@@ -82,12 +92,24 @@ slots:
     influence_conversation: false
     mappings:
       - type: custom
+  # Flag to indicate whether the user has been greeted already in the
+  # current conversation.  This is used by the custom greet action to
+  # avoid repeating the welcome message during multi‑turn flows (e.g.,
+  # login) or when misclassifications occur.
+  has_been_greeted:
+    type: bool
+    influence_conversation: false
+    initial_value: false
+    mappings:
+      - type: custom
+  # Indicates that the assistant is currently in a store search flow.  If
+  # true, numeric inputs are interpreted as store selections instead of
+  # product selections.
   store_context:
     type: bool
     influence_conversation: false
     mappings:
       - type: custom
-
   # Slots used during the login process.  These track the current step
   # (awaiting phone or password) and store the values until the login
   # process is completed.
@@ -106,24 +128,20 @@ slots:
     influence_conversation: false
     mappings:
       - type: custom
-
-  # Stores returned by the nearest store search.  This slot is used to keep
-  # the list of stores shown to the user so that a subsequent numeric or
-  # name input can be mapped back to a specific store.  Without this slot,
-  # Rasa will raise an error when the bot tries to set it.  If the slot
-  # already exists in your domain, this duplication will not change the
-  # behaviour.
+  # Stores returned by the nearest store search.  This slot keeps the list
+  # of stores shown to the user so that a subsequent numeric or name
+  # input can be mapped back to a specific store.
   stores_list:
     type: list
     influence_conversation: false
     mappings:
       - type: custom
 
-
+# Response templates used by utter actions.  These are simple text
+# responses; if you need more complex logic, define a custom action.
 responses:
   utter_greet:
     - text: "Welcome to AnythingInstantly! How can I help you today?"
-
   utter_faq:
     - text: |
         You can return a product within 7 days by visiting your orders page.
@@ -132,88 +150,46 @@ responses:
         For others, a small fee applies.
     - text: |
         Please contact customer support for any help.
-
   utter_goodbye:
     - text: "Goodbye! If you need anything else, just ask."
-
   utter_iamabot:
     - text: |
-        I am a virtual assistant bot built to help you with AnythingInstantly!
-
+        I am an AI‑powered assistant here to help you shop quickly and easily.
   utter_default:
+    - text: "Sorry, I didn't understand that. Could you rephrase?"
+  utter_register_link:
     - text: |
-        Sorry, I didn't understand that. Could you rephrase?
-
-  utter_ask_zipcode:
-    - text: |
-        Please provide your 5-digit ZIP code.
-
-  utter_invalid_zipcode:
-    - text: |
-        That ZIP code doesn't seem valid.
-        Please enter a proper 5-digit US ZIP code.
-
-  utter_ask_store_search:
-    - text: |
-        Please tell me the store or restaurant name you want to search.
-
-  utter_show_store_options:
-    - text: |
-        Found these stores in your area:
-
-  utter_ask_store_selection:
-    - text: |
-        Please select a store by typing its option number or name.
-
-  utter_no_stores_found:
-    - text: |
-        Sorry, no stores found near this ZIP code.
-        Would you like to try a different ZIP code?
-
-  utter_welcome_back:
-    - text: |
-        Welcome back!
-        Would you like to continue with your last ZIP code
-        {last_zipcode} and store {selected_store}?
-
-  utter_zipcode_changed:
-    - text: |
-        ZIP code updated to {zipcode}.
-
-  utter_store_changed:
-    - text: |
-        Store changed to {selected_store}.
-
+        You can create a new account by visiting our sign‑up page:
+        https://stage.anythinginstantly.com
   utter_fallback_store_search:
     - text: |
         Sorry, I couldn't find a matching store.
         Please try again or enter a different name.
 
-  utter_register_link:
-    - text: |
-        You can create a new account by visiting our sign‑up page:
-        https://stage.anythinginstantly.com
-
+# List of all custom actions implemented in actions.py.  Make sure every
+# action referenced in your rules or stories appears here.
 actions:
   - action_show_categories_with_products
+  - action_product_llm_search
+  - action_search_products
   - action_select_product
   - action_add_to_cart
   - action_view_cart
-  - action_get_address
   - action_checkout
-  - action_track_order
+  - action_get_address
   - action_create_stripe_checkout
   - action_check_payment_status
-  - action_product_llm_search
+  - action_track_order
   - action_next_product_page
   - action_reset_search_page
-  - validate_zipcode_form
   - action_get_nearest_store
   - action_set_selected_store
-  - action_recall_previous_location
   - action_show_store_options
   - action_change_zipcode
   - action_custom_fallback
   - action_prompt_login
   - action_login_user
   - action_custom_greet
+  - action_change_store
+  - action_recall_previous_location
+  - validate_zipcode_form
