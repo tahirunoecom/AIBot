@@ -35,3 +35,12 @@ stories:
   steps:
   - intent: check_payment_status
   - action: action_check_payment_status
+
+- story: Full store search path
+  steps:
+  - intent: search_store
+  - action: action_get_nearest_store
+  - intent: provide_zipcode
+  - action: action_get_nearest_store
+  - intent: select_store
+  - action: action_set_selected_store
