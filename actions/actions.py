@@ -146,7 +146,19 @@ class ActionSearchProducts(Action):
                 product_lines.append(f"{idx}. {title} ({price_str}){extra_info}")
 
             message = "Here are some products:\n" + "\n".join(product_lines)
-            dispatcher.utter_message(text=message + "\n\nReply with the product number or name to select it.")
+
+            buttons = [{"title": f"{i+1}", "payload": f"{p.get('title')}"} for i, p in enumerate(products[:5])]
+
+            # Note: This action seems to fetch 10 items but only display 5.
+            # The pagination logic here might need to be harmonized with other product search actions.
+            # For now, adding basic buttons.
+            page = 1 # This action doesn't seem to support pagination currently
+            items_per_page = 5
+            pagination_buttons = []
+            if len(products) > items_per_page:
+                 pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+
+            dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
 
             # Save product list in slot for selection later
             return [SlotSet("recent_products", json.dumps(products))]
@@ -599,6 +611,21 @@ class ActionLoginUser(Action):
                     events += [SlotSet("user_id", str(user_id))]
                     # clear transient slots
                     events += [SlotSet("login_step", None), SlotSet("login_phone", None), SlotSet("login_password", None)]
+
+                    # Check if a product was selected before login
+                    if tracker.get_slot("selected_product"):
+                        buttons = [
+                            {"title": "Add to cart", "payload": "/add_to_cart"},
+                            {"title": "Nearby Stores", "payload": "/search_store"}
+                        ]
+                        dispatcher.utter_message(text="What would you like to do next?", buttons=buttons)
+                    else:
+                        buttons = [
+                            {"title": "Nearby Stores", "payload": "/search_store"},
+                            {"title": "Show Categories", "payload": "/show_categories"}
+                        ]
+                        dispatcher.utter_message(text="How can I help you?", buttons=buttons)
+
                     return events
 
                 # On failure, ask for the password again, not the phone.
@@ -641,7 +668,13 @@ class ActionCustomGreet(Action):
         # accidentally trigger the `greet` intent.
         has_been_greeted = tracker.get_slot("has_been_greeted")
         if not has_been_greeted:
-            dispatcher.utter_message(text="Welcome to AnythingInstantly! How can I help you today?")
+            dispatcher.utter_message(
+                text="Welcome to AnythingInstantly! How can I help you today?",
+                buttons=[
+                    {"title": "Nearby Stores", "payload": "/search_store"},
+                    {"title": "Show Categories", "payload": "/show_categories"}
+                ]
+            )
             return [SlotSet("has_been_greeted", True)]
         # If the user was already greeted, suppress additional greeting messages
         return []
@@ -996,9 +1029,15 @@ class ActionProductLLMSearch(Action):
                 "\n\n➡️ Reply with the product number to see details, or type 'next' to see more options."
             )
 
-            buttons = [{"title": str(idx+1), "payload": str(idx+1)} for idx in range(len(product_dicts))]
-            buttons.append({"title": "Next ▶️", "payload": "next"})
-            dispatcher.utter_message(text=message, buttons=buttons)
+            buttons = [{"title": f"{i+1}", "payload": f"{p.get('title')}"} for i, p in enumerate(product_dicts)]
+
+            pagination_buttons = []
+            if page > 1:
+                pagination_buttons.append({"title": "Previous", "payload": "/previous_product_page"})
+            if len(product_dicts) == 5: # Assuming 5 items per page
+                pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+
+            dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
         else:
             dispatcher.utter_message(
                 text="😕 Sorry, I couldn't find any products for your search. Please try a different keyword or category."
@@ -1150,13 +1189,16 @@ class ActionGetNearestStore(Action):
                 store_search_string = ent.get("value")
                 break
 
+        page = tracker.get_slot("store_page") or 1
+        items_per_page = 5
+
         payload = {
             "address": {
                 "store_type_id": "",
                 "zip": str(zipcode),
                 "search_string": store_search_string or "",
-                "page": "0",
-                "items": "20"
+                "page": str(int(page - 1)), # API is 0-indexed
+                "items": str(items_per_page)
             }
         }
 
@@ -1183,11 +1225,7 @@ class ActionGetNearestStore(Action):
                     stores = nested
 
             # Normalize store objects to preserve essential fields used later, such as
-            # wh_account_id and the store_name value used for product search.  We
-            # include `name` (for display), `address`, `wh_account_id` and
-            # `store_name` so that ActionSetSelectedStore can fetch products from
-            # the selected store.  If additional fields are required later (e.g.
-            # store_icon or store_type), they can be added here as well.
+            # wh_account_id and the store_name value used for product search.
             store_dicts: List[Dict[str, Any]] = []
             for s in stores:
                 if not isinstance(s, dict):
@@ -1211,9 +1249,6 @@ class ActionGetNearestStore(Action):
                 # supply as the search_string to getMasterProducts
                 store_name_raw = s.get("store_name") or s.get("name") or ""
 
-                # Build a dictionary preserving the above fields.  Additional
-                # properties from the API response are ignored to reduce payload
-                # size but can be kept if needed.
                 store_dicts.append({
                     "name": str(name),
                     "address": full_address,
@@ -1225,17 +1260,31 @@ class ActionGetNearestStore(Action):
                 store_dicts = [s for s in store_dicts if store_search_string.lower() in s["name"].lower()]
 
             if not store_dicts:
-                dispatcher.utter_message(
-                    text="Sorry, no stores found for this ZIP code. Would you like to try a different ZIP code?"
-                )
-                return [SlotSet("stores_list", []), SlotSet("selected_store", None)]
+                if page > 1:
+                    dispatcher.utter_message(text="No more stores found.")
+                    return [SlotSet("store_page", page - 1)] # Go back to previous page
+                else:
+                    dispatcher.utter_message(
+                        text="Sorry, no stores found for this ZIP code. Would you like to try a different ZIP code?"
+                    )
+                    return [SlotSet("stores_list", []), SlotSet("selected_store", None)]
 
-            # Present up to 5 stores
+            # Present up to 5 stores with buttons
             lines = []
-            for idx, store in enumerate(store_dicts[:5], start=1):
+            buttons = []
+            for idx, store in enumerate(store_dicts, start=1):
                 lines.append(f"{idx}. {store['name']} - {store['address']}")
-            dispatcher.utter_message(text="Found these stores in your area:\n" + "\n".join(lines))
-            dispatcher.utter_message(text="Please select a store by typing its option number or name.")
+                buttons.append({"title": f"{idx}", "payload": f"{store['name']}"})
+
+            message = "Found these stores in your area:\n" + "\n".join(lines)
+
+            pagination_buttons = []
+            if page > 1:
+                pagination_buttons.append({"title": "Previous", "payload": "/previous_store_page"})
+            if len(store_dicts) == items_per_page:
+                pagination_buttons.append({"title": "Next", "payload": "/next_store_page"})
+
+            dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
 
             return [
                 SlotSet("zipcode", zipcode),
@@ -1364,8 +1413,19 @@ class ActionSetSelectedStore(Action):
                         if len(desc) > 80:
                             desc = desc[:80] + "…"
                         lines.append(f"{idx}. **{title}**\n{price_str}\n{desc}")
-                    msg = "🛒 **Products available in this store:**\n\n" + "\n\n".join(lines) + "\n\n➡️ Reply with the product number to see details."
-                    dispatcher.utter_message(text=msg)
+                    msg = "🛒 **Products available in this store:**\n\n" + "\n\n".join(lines)
+
+                    buttons = [{"title": f"{i+1}", "payload": f"{p.get('title')}"} for i, p in enumerate(product_list[:5])]
+
+                    page = tracker.get_slot("search_page") or 1
+                    items_per_page = 5
+                    pagination_buttons = []
+                    if page > 1:
+                        pagination_buttons.append({"title": "Previous", "payload": "/previous_product_page"}) # Assuming a previous_product_page intent exists
+                    if len(product_list) == items_per_page:
+                        pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+
+                    dispatcher.utter_message(text=msg, buttons=buttons + pagination_buttons)
                     # Save to recent_products slot
                     events.append(SlotSet("recent_products", json.dumps(product_list)))
                     # Reset search_page for next
@@ -1438,3 +1498,43 @@ class ActionShowStoreOptions(Action):
         dispatcher.utter_message(text=store_list_text)
         dispatcher.utter_message(text="Please select a store by typing its option number or name.")
         return []
+
+
+class ActionNextStorePage(Action):
+    def name(self) -> Text:
+        return "action_next_store_page"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict]:
+
+        store_page = tracker.get_slot("store_page") or 1
+        return [SlotSet("store_page", store_page + 1), FollowupAction("action_get_nearest_store")]
+
+class ActionPreviousStorePage(Action):
+    def name(self) -> Text:
+        return "action_previous_store_page"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict]:
+
+        store_page = tracker.get_slot("store_page") or 1
+        # Prevent going below page 1
+        next_page = max(1.0, store_page - 1)
+        return [SlotSet("store_page", next_page), FollowupAction("action_get_nearest_store")]
+
+class ActionPreviousProductPage(Action):
+    def name(self) -> Text:
+        return "action_previous_product_page"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict]:
+
+        search_page = tracker.get_slot("search_page") or 1
+        # Prevent going below page 1
+        next_page = max(1.0, search_page - 1)
+        # Here we assume that a search has already been performed,
+        # so last_search_string should be set.
+        return [SlotSet("search_page", next_page), FollowupAction("action_product_llm_search")]

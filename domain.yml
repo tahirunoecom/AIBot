@@ -29,6 +29,9 @@ intents:
   - register
   - inform
   - provide_password
+  - next_store_page
+  - previous_store_page
+  - previous_product_page
 
 # Entity types used by the NLU.  These names must match the entity
 # annotations in your training data and the parameters returned from any
@@ -67,7 +70,16 @@ slots:
     mappings:
       - type: custom
   search_page:
-    type: text
+    type: float
+    initial_value: 1.0
+    min_value: 1.0
+    influence_conversation: false
+    mappings:
+      - type: custom
+  store_page:
+    type: float
+    initial_value: 1.0
+    min_value: 1.0
     influence_conversation: false
     mappings:
       - type: custom
@@ -195,3 +207,6 @@ actions:
   - action_change_store
   - action_recall_previous_location
   - validate_zipcode_form
+  - action_next_store_page
+  - action_previous_store_page
+  - action_previous_product_page
