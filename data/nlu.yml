@@ -207,6 +207,12 @@ nlu:
     - Number three
     - I'd like the first store
     - Taco Bell Market St
+    - Nawab Grill
+    - RichaMalhotra
+    - Booking Express
+    - R barbershop
+    - girls fun
+    - Starbucks
       
 - intent: change_store
   examples: |

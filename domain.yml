@@ -81,6 +81,11 @@ slots:
     influence_conversation: false
     mappings:
       - type: custom
+  last_product_search_action:
+    type: text
+    influence_conversation: false
+    mappings:
+    - type: custom
   last_search_string:
     type: text
     influence_conversation: false
