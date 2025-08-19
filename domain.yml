@@ -72,14 +72,12 @@ slots:
   search_page:
     type: float
     initial_value: 1.0
-    min_value: 1.0
     influence_conversation: false
     mappings:
       - type: custom
   store_page:
     type: float
     initial_value: 1.0
-    min_value: 1.0
     influence_conversation: false
     mappings:
       - type: custom
