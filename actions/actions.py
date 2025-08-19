@@ -68,7 +68,10 @@ class ActionShowCategoriesWithProducts(Action):
             full_message = "\n\n".join(messages)
             dispatcher.utter_message(text=full_message + "\n\nReply with the product number or name to select it.")
 
-            return [SlotSet("recent_products", json.dumps(all_products))]
+            return [
+                SlotSet("recent_products", json.dumps(all_products)),
+                SlotSet("last_product_search_action", self.name())
+            ]
         except Exception as e:
             print(f"[EXCEPTION] in ActionShowCategoriesWithProducts: {e}")
             dispatcher.utter_message(text="Sorry, I couldn't fetch categories right now.")
@@ -156,7 +159,7 @@ class ActionSearchProducts(Action):
             items_per_page = 5
             pagination_buttons = []
             if len(products) > items_per_page:
-                 pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+                 pagination_buttons.append({"title": "Next", "payload": "next"})
 
             dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
 
@@ -615,14 +618,14 @@ class ActionLoginUser(Action):
                     # Check if a product was selected before login
                     if tracker.get_slot("selected_product"):
                         buttons = [
-                            {"title": "Add to cart", "payload": "/add_to_cart"},
-                            {"title": "Nearby Stores", "payload": "/search_store"}
+                            {"title": "Add to cart", "payload": "add to cart"},
+                            {"title": "Nearby Stores", "payload": "find me a store near me"}
                         ]
                         dispatcher.utter_message(text="What would you like to do next?", buttons=buttons)
                     else:
                         buttons = [
-                            {"title": "Nearby Stores", "payload": "/search_store"},
-                            {"title": "Show Categories", "payload": "/show_categories"}
+                            {"title": "Nearby Stores", "payload": "find me a store near me"},
+                            {"title": "Show Categories", "payload": "show categories"}
                         ]
                         dispatcher.utter_message(text="How can I help you?", buttons=buttons)
 
@@ -671,13 +674,14 @@ class ActionCustomGreet(Action):
             dispatcher.utter_message(
                 text="Welcome to AnythingInstantly! How can I help you today?",
                 buttons=[
-                    {"title": "Nearby Stores", "payload": "/search_store"},
-                    {"title": "Show Categories", "payload": "/show_categories"}
+                    {"title": "Nearby Stores", "payload": "Find me a store near me"},
+                    {"title": "Show Categories", "payload": "Show Categories"}
                 ]
             )
             return [SlotSet("has_been_greeted", True)]
-        # If the user was already greeted, suppress additional greeting messages
-        return []
+        else:
+            dispatcher.utter_message(text="Hello again! How can I help?")
+            return []
 
 
 class ActionTrackOrder(Action):
@@ -1033,9 +1037,9 @@ class ActionProductLLMSearch(Action):
 
             pagination_buttons = []
             if page > 1:
-                pagination_buttons.append({"title": "Previous", "payload": "/previous_product_page"})
+                pagination_buttons.append({"title": "Previous", "payload": "previous products"})
             if len(product_dicts) == 5: # Assuming 5 items per page
-                pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+                pagination_buttons.append({"title": "Next", "payload": "next"})
 
             dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
         else:
@@ -1055,13 +1059,15 @@ class ActionProductLLMSearch(Action):
             return [
                 SlotSet("recent_products", json.dumps(product_dicts)),
                 SlotSet("search_page", page),
-                SlotSet("last_search_string", last_search_string)
+                SlotSet("last_search_string", last_search_string),
+                SlotSet("last_product_search_action", self.name())
             ]
         else:
             return [
                 SlotSet("recent_products", None),
                 SlotSet("search_page", 1),
-                SlotSet("last_search_string", last_search_string)
+                SlotSet("last_search_string", last_search_string),
+                SlotSet("last_product_search_action", None)
             ]
 
 
@@ -1074,17 +1080,34 @@ class ActionNextProductPage(Action):
             tracker: Tracker,
             domain: dict) -> list:
 
-        page = tracker.get_slot("search_page")
-        try:
-            page = int(page) + 1 if page else 2
-        except ValueError:
-            page = 2
+        page = tracker.get_slot("search_page") or 1
+        next_page = page + 1
 
-        print(f"[DEBUG] Incrementing search page slot to: {page}")
+        last_action = tracker.get_slot("last_product_search_action")
+        if not last_action:
+            dispatcher.utter_message(text="I am not sure what products you were looking at. Please search again.")
+            return []
 
-        # Update page slot, search action will use updated page on next call
-        return [SlotSet("search_page", page)]
+        return [SlotSet("search_page", next_page), FollowupAction(last_action)]
 
+
+class ActionPreviousProductPage(Action):
+    def name(self) -> Text:
+        return "action_previous_product_page"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict]:
+
+        page = tracker.get_slot("search_page") or 1
+        next_page = max(1.0, page - 1)
+
+        last_action = tracker.get_slot("last_product_search_action")
+        if not last_action:
+            dispatcher.utter_message(text="I am not sure what products you were looking at. Please search again.")
+            return []
+
+        return [SlotSet("search_page", next_page), FollowupAction(last_action)]
 
 class ActionResetSearchPage(Action):
     def name(self) -> str:
@@ -1272,7 +1295,7 @@ class ActionGetNearestStore(Action):
             # Present up to 5 stores with buttons
             lines = []
             buttons = []
-            for idx, store in enumerate(store_dicts, start=1):
+            for idx, store in enumerate(store_dicts[:items_per_page], start=1):
                 lines.append(f"{idx}. {store['name']} - {store['address']}")
                 buttons.append({"title": f"{idx}", "payload": f"{store['name']}"})
 
@@ -1280,9 +1303,9 @@ class ActionGetNearestStore(Action):
 
             pagination_buttons = []
             if page > 1:
-                pagination_buttons.append({"title": "Previous", "payload": "/previous_store_page"})
+                pagination_buttons.append({"title": "Previous", "payload": "previous stores"})
             if len(store_dicts) == items_per_page:
-                pagination_buttons.append({"title": "Next", "payload": "/next_store_page"})
+                pagination_buttons.append({"title": "Next", "payload": "next stores"})
 
             dispatcher.utter_message(text=message, buttons=buttons + pagination_buttons)
 
@@ -1421,9 +1444,9 @@ class ActionSetSelectedStore(Action):
                     items_per_page = 5
                     pagination_buttons = []
                     if page > 1:
-                        pagination_buttons.append({"title": "Previous", "payload": "/previous_product_page"}) # Assuming a previous_product_page intent exists
+                        pagination_buttons.append({"title": "Previous", "payload": "previous products"})
                     if len(product_list) == items_per_page:
-                        pagination_buttons.append({"title": "Next", "payload": "/search_products_next"})
+                        pagination_buttons.append({"title": "Next", "payload": "next"})
 
                     dispatcher.utter_message(text=msg, buttons=buttons + pagination_buttons)
                     # Save to recent_products slot
@@ -1436,6 +1459,8 @@ class ActionSetSelectedStore(Action):
                     # Clear the stores_list slot so that product selections are not
                     # interpreted as store selections on subsequent digit inputs
                     events.append(SlotSet("stores_list", None))
+                    # Set the last product search action
+                    events.append(SlotSet("last_product_search_action", self.name()))
                 else:
                     dispatcher.utter_message(text="Sorry, I couldn't find any products for this store.")
                     # Clear recent_products and exit store context since there is no product list
@@ -1523,18 +1548,3 @@ class ActionPreviousStorePage(Action):
         # Prevent going below page 1
         next_page = max(1.0, store_page - 1)
         return [SlotSet("store_page", next_page), FollowupAction("action_get_nearest_store")]
-
-class ActionPreviousProductPage(Action):
-    def name(self) -> Text:
-        return "action_previous_product_page"
-
-    def run(self, dispatcher: CollectingDispatcher,
-            tracker: Tracker,
-            domain: Dict[Text, Any]) -> List[Dict]:
-
-        search_page = tracker.get_slot("search_page") or 1
-        # Prevent going below page 1
-        next_page = max(1.0, search_page - 1)
-        # Here we assume that a search has already been performed,
-        # so last_search_string should be set.
-        return [SlotSet("search_page", next_page), FollowupAction("action_product_llm_search")]
